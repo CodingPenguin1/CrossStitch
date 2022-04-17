@@ -13,15 +13,35 @@ def distance(point_a, point_b):
 
 
 def get_dmc(rgb):
-    df = pd.read_csv('dmc.csv')
+    # Generate lookup table
+    lookup_table = []
+    with open('dmc.txt', 'r') as f:
+        lines = f.readlines()
+        for i in range(0, len(lines), 3):
+            dmc_code = lines[i].strip()
+            dmc_name = lines[i + 1].strip()
+            dmc_hex = lines[i + 2].strip()
+            dmc_rgb = tuple(int(dmc_hex[i:i + 2], 16) for i in (0, 2, 4))  # https://stackoverflow.com/questions/29643352/converting-hex-to-rgb-value-in-python
+            lookup_table.append([dmc_code, dmc_name, dmc_hex, dmc_rgb])
+
+    # Find closest color to `rgb` in lookup table
     closest_row_index, best_difference = 0, float('inf')
-    for i, row in df.iterrows():
-        dmc_rgb = (row['red'], row['green'], row['blue'])
-        difference = distance(rgb, dmc_rgb)
-        if difference < best_difference:
-            best_difference = difference
-            closest_row_index = i
-    return df.iloc[closest_row_index][0], df.iloc[closest_row_index][4]
+    for i in range(len(lookup_table)):
+        dmc_rgb = lookup_table[i][3]
+        diff = distance(dmc_rgb, rgb)
+        if diff < best_difference:
+            closest_row_index, best_difference = i, diff
+    return lookup_table[closest_row_index]
+
+    # df = pd.read_csv('dmc.csv')
+    # closest_row_index, best_difference = 0, float('inf')
+    # for i, row in df.iterrows():
+    #     dmc_rgb = (row['red'], row['green'], row['blue'])
+    #     difference = distance(rgb, dmc_rgb)
+    #     if difference < best_difference:
+    #         best_difference = difference
+    #         closest_row_index = i
+    # return df.iloc[closest_row_index][0], df.iloc[closest_row_index][4]
 
 
 if __name__ == '__main__':
@@ -62,15 +82,17 @@ if __name__ == '__main__':
         colors = pixelated_image.getcolors()  # [(count, index), ...]
         palette = pixelated_image.palette.colors  # {color: index, ...}
 
-        print('{:<8}{:<10}{:<30}{:<18}{:<10}'.format('Index', 'DMC Code', 'DMC Name', 'RGB', 'Count'))
+        print('{:<8}{:<10}{:<25}{:<18}{:<10}{:<18}{:<15}{:<15}'.format('Index', 'DMC Code', 'DMC Name', 'DMC RGB', 'DMC HEX', 'Actual RGB', 'Actual HEX', 'Count'))
         for count, index in colors:
             rgb = None
             for key in palette:
                 if palette[key] == index:
                     rgb = key
-            dmc_code, dmc_name = get_dmc(rgb)
+
+            _hex = '%02x%02x%02x' % rgb
+            dmc_code, dmc_name, dmc_hex, dmc_rgb = get_dmc(rgb)
             dmc_table.append([index, dmc_code, dmc_name, rgb, count])
-            print('{:<8}{:<10}{:<30}{:<18}{:<10}'.format(index, dmc_code, dmc_name, str(rgb), count))
+            print('{:<8}{:<10}{:<25}{:<18}{:<10}{:<18}{:<15}{:<15}'.format(index, dmc_code, dmc_name, str(dmc_rgb), dmc_hex, str(rgb), _hex, count))
 
         # Write output files
         downscaled_filepath = join('output', 'downscaled.png')
