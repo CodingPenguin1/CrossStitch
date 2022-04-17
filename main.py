@@ -1,6 +1,5 @@
 #!/usr/bin/env python
 from os.path import join
-from tkinter.tix import MAX
 
 from PIL import Image, ImageDraw
 
@@ -36,7 +35,7 @@ def get_dmc(rgb):
 
 if __name__ == '__main__':
     # === DOWNSCALING AND CONVERTING TO DMC COLORS === #
-    with Image.open(join('source_images', 'stardew.png')) as original_image:
+    with Image.open(join('source_images', 'bills.jpg')) as original_image:
         # Downscale with bilinear interpolation
         height = int((DESIRED_WIDTH / original_image.width) * original_image.height)
         downscaled_image = original_image.resize((DESIRED_WIDTH, height), resample=2)
