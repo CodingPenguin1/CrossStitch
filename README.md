@@ -16,7 +16,7 @@ Input image:
 
 ![Source Image](sample_images/stardew.png)
 
-With a specified width of `500` and `10` max DMC colors:
+With a specified width of `500` and `10` max DMC colors
 
 Output DMC-only image:
 
