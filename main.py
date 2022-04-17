@@ -35,6 +35,7 @@ def get_dmc(rgb):
 
 
 if __name__ == '__main__':
+    # === DOWNSCALING AND CONVERTING TO DMC COLORS === #
     with Image.open(join('source_images', 'stardew.png')) as original_image:
         # Downscale with bilinear interpolation
         height = int((DESIRED_WIDTH / original_image.width) * original_image.height)
