@@ -57,6 +57,10 @@ if __name__ == '__main__':
         UPSCALE_FACTOR = 13
         pixelated_upscaled = image.resize((image.size[0] * UPSCALE_FACTOR, image.size[1] * UPSCALE_FACTOR), 0)
 
+        # Create template file (white with black text and lines, no image)
+        template_image = Image.new('RGB', pixelated_upscaled.size, color='white')
+        template_draw = ImageDraw.Draw(template_image)
+
         # Draw numbers on each pixel
         draw = ImageDraw.Draw(pixelated_upscaled)
         for x in range(pixelated_image.width):
@@ -64,18 +68,23 @@ if __name__ == '__main__':
                 draw_coord = (x * UPSCALE_FACTOR + 4, y * UPSCALE_FACTOR + 1)  # Text characters are default 6x6
                 index = str(pixelated_image.getpixel((x, y)))
                 draw.text(draw_coord, index, anchor='mm', fill='black')
+                template_draw.text(draw_coord, index, anchor='mm', fill='black')
 
         # Draw lines between every pixel
         for x in range(UPSCALE_FACTOR - 1, pixelated_upscaled.width, UPSCALE_FACTOR):
             draw.rectangle([(x, 0), (x + 1, pixelated_upscaled.height)], fill='black')
+            template_draw.rectangle([(x, 0), (x + 1, pixelated_upscaled.height)], fill='black')
         for y in range(UPSCALE_FACTOR - 1, pixelated_upscaled.height, UPSCALE_FACTOR):
             draw.rectangle([(0, y), (pixelated_upscaled.width, y + 1)], fill='black')
+            template_draw.rectangle([(0, y), (pixelated_upscaled.width, y + 1)], fill='black')
 
         # Draw bigger lines between every 10 pixels
         for x in range(10 * UPSCALE_FACTOR - 1, pixelated_upscaled.width, UPSCALE_FACTOR * 10):
             draw.rectangle([(x - 1, 0), (x + 2, pixelated_upscaled.height)], fill='black')
+            template_draw.rectangle([(x - 1, 0), (x + 2, pixelated_upscaled.height)], fill='black')
         for y in range(10 * UPSCALE_FACTOR - 1, pixelated_upscaled.height, UPSCALE_FACTOR * 10):
             draw.rectangle([(0, y - 1), (pixelated_upscaled.width, y + 2)], fill='black')
+            template_draw.rectangle([(0, y - 1), (pixelated_upscaled.width, y + 2)], fill='black')
 
         # Generate DMC color key
         dmc_table = []  # [[index, DMC code, DMC name, RGB, count], ...]
@@ -101,7 +110,11 @@ if __name__ == '__main__':
 
         cross_stitch_filepath = join('output', 'cross-stitch.png')
         pixelated_upscaled.save(cross_stitch_filepath)
-        print(f'Cross-stitch template written to {cross_stitch_filepath}')
+        print(f'Cross-stitch written to {cross_stitch_filepath}')
+
+        template_filepath = join('output', 'template.png')
+        template_image.save(template_filepath)
+        print(f'Template written to {template_filepath}')
 
         key_filepath = join('output', 'key.txt')
         with open(key_filepath, 'w') as f:
