@@ -4,7 +4,7 @@ from os.path import join
 import pandas as pd
 from PIL import Image, ImageDraw
 
-MAX_COLORS = 6  # Must be no bigger than 256 (https://stackoverflow.com/questions/37146711/im-getcolors-returns-none)
+MAX_COLORS = 10  # Must be no bigger than 256 (https://stackoverflow.com/questions/37146711/im-getcolors-returns-none)
 DESIRED_WIDTH = 100
 
 
@@ -33,16 +33,6 @@ def get_dmc(rgb):
             closest_row_index, best_difference = i, diff
     return lookup_table[closest_row_index]
 
-    # df = pd.read_csv('dmc.csv')
-    # closest_row_index, best_difference = 0, float('inf')
-    # for i, row in df.iterrows():
-    #     dmc_rgb = (row['red'], row['green'], row['blue'])
-    #     difference = distance(rgb, dmc_rgb)
-    #     if difference < best_difference:
-    #         best_difference = difference
-    #         closest_row_index = i
-    # return df.iloc[closest_row_index][0], df.iloc[closest_row_index][4]
-
 
 if __name__ == '__main__':
     with Image.open(join('source_images', 'bills.png')) as image:
@@ -51,7 +41,8 @@ if __name__ == '__main__':
         image = image.resize((DESIRED_WIDTH, height), resample=2)
 
         # Downsample to a lower colorspace
-        pixelated_image = image.convert(mode='P', palette=1, colors=MAX_COLORS)
+        pixelated_image = image.convert(mode='P', palette=Image.ADAPTIVE, colors=MAX_COLORS)
+        pixelated_image.show()
 
         # Upscale so we can put numbers on each pixel
         UPSCALE_FACTOR = 13
