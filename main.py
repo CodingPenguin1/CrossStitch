@@ -4,7 +4,7 @@ from tkinter.tix import MAX
 
 from PIL import Image, ImageDraw
 
-MAX_COLORS = 15  # Must be no bigger than 256 (https://stackoverflow.com/questions/37146711/im-getcolors-returns-none)
+MAX_COLORS = 250  # Must be no bigger than 256 (https://stackoverflow.com/questions/37146711/im-getcolors-returns-none)
 DESIRED_WIDTH = 100
 
 
@@ -35,7 +35,7 @@ def get_dmc(rgb):
 
 
 if __name__ == '__main__':
-    with Image.open(join('source_images', 'bills.png')) as original_image:
+    with Image.open(join('source_images', 'cat.jpg')) as original_image:
         # Downscale with bilinear interpolation
         height = int((DESIRED_WIDTH / original_image.width) * original_image.height)
         downscaled_image = original_image.resize((DESIRED_WIDTH, height), resample=2)
@@ -44,7 +44,6 @@ if __name__ == '__main__':
         while True:
             # Downsample to a lower colorspace
             pixelated_image = downscaled_image.convert(mode='P', palette=Image.ADAPTIVE, colors=scaledown_color_count)
-            # pixelated_image.show()
 
             # Generate DMC color key
             dmc_table = []  # [[index, DMC code, DMC name, RGB, count], ...]
@@ -67,16 +66,19 @@ if __name__ == '__main__':
                 break
             else:
                 scaledown_color_count += 1
+            if scaledown_color_count == 256:
+                break
+
+        print(f'Scaling {scaledown_color_count} RGB colors to {len(dmc_table)} DMC colors')
 
         # Reindex DMC table
         for i in range(len(dmc_table)):
             dmc_table[i][0] = i
 
         # Rewrite pixel values to match DMC values
-        for dmc in dmc_table:
-            print('\t'.join([str(i) for i in dmc]))
-        for x in range(pixelated_image.width):
-            for y in range(pixelated_image.height):
+        dmc_image = Image.new(mode='P', size=pixelated_image.size, color=0)
+        for x in range(dmc_image.width):
+            for y in range(dmc_image.height):
                 # Get DMC RGB value to set pixel to
                 closest_dmc_rgb, best_difference = None, float('inf')
                 for dmc in dmc_table:
@@ -88,16 +90,16 @@ if __name__ == '__main__':
                         closest_dmc_rgb, best_difference = dmc[3], diff
 
                 # Set the pixel to the DMC RGB value
-                pixelated_image.putpixel((x, y), closest_dmc_rgb)
+                dmc_image.putpixel((x, y), closest_dmc_rgb)
 
         # Update color list and palette since we just changed the pixel values
-        colors = pixelated_image.getcolors()  # [(count, index), ...]
-        palette = pixelated_image.palette.colors  # {color: index, ...}
+        colors = dmc_image.getcolors()  # [(count, index), ...]
+        palette = dmc_image.palette.colors  # {color: index, ...}
 
         # === GENERATE OUTPUT IMAGES === #
         # Upscale so we can put numbers on each pixel
         UPSCALE_FACTOR = 26
-        pixelated_upscaled = downscaled_image.resize((downscaled_image.size[0] * UPSCALE_FACTOR, downscaled_image.size[1] * UPSCALE_FACTOR), 0)
+        pixelated_upscaled = dmc_image.resize((dmc_image.size[0] * UPSCALE_FACTOR, dmc_image.size[1] * UPSCALE_FACTOR), 0)
 
         # Create template file (white with black text and lines, no image)
         template_image = Image.new('RGB', pixelated_upscaled.size, color='white')
@@ -105,22 +107,14 @@ if __name__ == '__main__':
 
         # Draw numbers on each pixel
         draw = ImageDraw.Draw(pixelated_upscaled)
-        for x in range(pixelated_image.width):
-            for y in range(pixelated_image.height):
+        for x in range(dmc_image.width):
+            for y in range(dmc_image.height):
                 draw_coord = (x * UPSCALE_FACTOR + 4, y * UPSCALE_FACTOR + 1)  # Text characters are default 6x6
 
                 # Get index from DMC list
-                rgb_index = pixelated_image.getpixel((x, y))
-                dmc_rgb_value = None
-                dmc_index = None
-                for key in palette:
-                    if palette[key] == rgb_index:
-                        dmc_rgb_value = key
-                        break
-                for i in range(len(dmc_table)):
-                    if dmc_table[i][3] == dmc_rgb_value:
-                        dmc_index = i
-                        break
+                rgb_index = dmc_image.getpixel((x, y))
+                dmc_rgb_value = next((key for key in palette if palette[key] == rgb_index), None)
+                dmc_index = next((i for i in range(len(dmc_table)) if dmc_table[i][3] == dmc_rgb_value), None)
 
                 draw.text(draw_coord, str(dmc_index), anchor='mm', fill='black')
                 template_draw.text(draw_coord, str(dmc_index), anchor='mm', fill='black')
@@ -142,9 +136,9 @@ if __name__ == '__main__':
             template_draw.rectangle([(0, y - 1), (pixelated_upscaled.width, y + 2)], fill='black')
 
         # === WRITE OUTPUT FILES === #
-        downscaled_filepath = join('output', 'downscaled.png')
-        pixelated_image.save(downscaled_filepath)
-        print(f'Downscaled image written to {downscaled_filepath}')
+        dmc_image_filepath = join('output', 'dmc_image.png')
+        dmc_image.save(dmc_image_filepath)
+        print(f'Downscaled image written to {dmc_image_filepath}')
 
         cross_stitch_filepath = join('output', 'cross-stitch.png')
         pixelated_upscaled.save(cross_stitch_filepath)
