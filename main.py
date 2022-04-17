@@ -1,8 +1,9 @@
 #!/usr/bin/env python
+import turtle
 from os.path import join
 from tkinter import filedialog as fd
+
 from PIL import Image, ImageDraw
-import turtle
 from progress.bar import IncrementalBar
 
 
