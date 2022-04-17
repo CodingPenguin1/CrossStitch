@@ -1,10 +1,10 @@
 #!/usr/bin/env python
 from os.path import join
+from tkinter.tix import MAX
 
-import pandas as pd
 from PIL import Image, ImageDraw
 
-MAX_COLORS = 10  # Must be no bigger than 256 (https://stackoverflow.com/questions/37146711/im-getcolors-returns-none)
+MAX_COLORS = 15  # Must be no bigger than 256 (https://stackoverflow.com/questions/37146711/im-getcolors-returns-none)
 DESIRED_WIDTH = 100
 
 
@@ -35,18 +35,69 @@ def get_dmc(rgb):
 
 
 if __name__ == '__main__':
-    with Image.open(join('source_images', 'bills.png')) as image:
+    with Image.open(join('source_images', 'bills.png')) as original_image:
         # Downscale with bilinear interpolation
-        height = int((DESIRED_WIDTH / image.width) * image.height)
-        image = image.resize((DESIRED_WIDTH, height), resample=2)
+        height = int((DESIRED_WIDTH / original_image.width) * original_image.height)
+        downscaled_image = original_image.resize((DESIRED_WIDTH, height), resample=2)
 
-        # Downsample to a lower colorspace
-        pixelated_image = image.convert(mode='P', palette=Image.ADAPTIVE, colors=MAX_COLORS)
-        pixelated_image.show()
+        scaledown_color_count = MAX_COLORS
+        while True:
+            # Downsample to a lower colorspace
+            pixelated_image = downscaled_image.convert(mode='P', palette=Image.ADAPTIVE, colors=scaledown_color_count)
+            # pixelated_image.show()
 
+            # Generate DMC color key
+            dmc_table = []  # [[index, DMC code, DMC name, RGB, count], ...]
+            colors = pixelated_image.getcolors()  # [(count, index), ...]
+            palette = pixelated_image.palette.colors  # {color: index, ...}
+
+            for count, index in colors:
+                rgb = None
+                for key in palette:
+                    if palette[key] == index:
+                        rgb = key
+
+                _hex = '%02x%02x%02x' % rgb
+                dmc_code, dmc_name, dmc_hex, dmc_rgb = get_dmc(rgb)
+                dmc_already_used = any(dmc_table[i][1] == dmc_code for i in range(len(dmc_table)))
+                if not dmc_already_used:
+                    dmc_table.append([index, dmc_code, dmc_name, dmc_rgb, dmc_hex, rgb, _hex, count])
+
+            if len(dmc_table) == MAX_COLORS:
+                break
+            else:
+                scaledown_color_count += 1
+
+        # Reindex DMC table
+        for i in range(len(dmc_table)):
+            dmc_table[i][0] = i
+
+        # Rewrite pixel values to match DMC values
+        for dmc in dmc_table:
+            print('\t'.join([str(i) for i in dmc]))
+        for x in range(pixelated_image.width):
+            for y in range(pixelated_image.height):
+                # Get DMC RGB value to set pixel to
+                closest_dmc_rgb, best_difference = None, float('inf')
+                for dmc in dmc_table:
+                    dmc_rgb = dmc[3]
+                    rgb_index = pixelated_image.getpixel((x, y))
+                    rgb_value = next((key for key in palette if palette[key] == rgb_index), None)
+                    diff = distance(dmc_rgb, rgb_value)
+                    if diff < best_difference:
+                        closest_dmc_rgb, best_difference = dmc[3], diff
+
+                # Set the pixel to the DMC RGB value
+                pixelated_image.putpixel((x, y), closest_dmc_rgb)
+
+        # Update color list and palette since we just changed the pixel values
+        colors = pixelated_image.getcolors()  # [(count, index), ...]
+        palette = pixelated_image.palette.colors  # {color: index, ...}
+
+        # === GENERATE OUTPUT IMAGES === #
         # Upscale so we can put numbers on each pixel
-        UPSCALE_FACTOR = 13
-        pixelated_upscaled = image.resize((image.size[0] * UPSCALE_FACTOR, image.size[1] * UPSCALE_FACTOR), 0)
+        UPSCALE_FACTOR = 26
+        pixelated_upscaled = downscaled_image.resize((downscaled_image.size[0] * UPSCALE_FACTOR, downscaled_image.size[1] * UPSCALE_FACTOR), 0)
 
         # Create template file (white with black text and lines, no image)
         template_image = Image.new('RGB', pixelated_upscaled.size, color='white')
@@ -57,9 +108,22 @@ if __name__ == '__main__':
         for x in range(pixelated_image.width):
             for y in range(pixelated_image.height):
                 draw_coord = (x * UPSCALE_FACTOR + 4, y * UPSCALE_FACTOR + 1)  # Text characters are default 6x6
-                index = str(pixelated_image.getpixel((x, y)))
-                draw.text(draw_coord, index, anchor='mm', fill='black')
-                template_draw.text(draw_coord, index, anchor='mm', fill='black')
+
+                # Get index from DMC list
+                rgb_index = pixelated_image.getpixel((x, y))
+                dmc_rgb_value = None
+                dmc_index = None
+                for key in palette:
+                    if palette[key] == rgb_index:
+                        dmc_rgb_value = key
+                        break
+                for i in range(len(dmc_table)):
+                    if dmc_table[i][3] == dmc_rgb_value:
+                        dmc_index = i
+                        break
+
+                draw.text(draw_coord, str(dmc_index), anchor='mm', fill='black')
+                template_draw.text(draw_coord, str(dmc_index), anchor='mm', fill='black')
 
         # Draw lines between every pixel
         for x in range(UPSCALE_FACTOR - 1, pixelated_upscaled.width, UPSCALE_FACTOR):
@@ -77,24 +141,7 @@ if __name__ == '__main__':
             draw.rectangle([(0, y - 1), (pixelated_upscaled.width, y + 2)], fill='black')
             template_draw.rectangle([(0, y - 1), (pixelated_upscaled.width, y + 2)], fill='black')
 
-        # Generate DMC color key
-        dmc_table = []  # [[index, DMC code, DMC name, RGB, count], ...]
-        colors = pixelated_image.getcolors()  # [(count, index), ...]
-        palette = pixelated_image.palette.colors  # {color: index, ...}
-
-        print('{:<8}{:<10}{:<25}{:<18}{:<10}{:<18}{:<15}{:<15}'.format('Index', 'DMC Code', 'DMC Name', 'DMC RGB', 'DMC HEX', 'Actual RGB', 'Actual HEX', 'Count'))
-        for count, index in colors:
-            rgb = None
-            for key in palette:
-                if palette[key] == index:
-                    rgb = key
-
-            _hex = '%02x%02x%02x' % rgb
-            dmc_code, dmc_name, dmc_hex, dmc_rgb = get_dmc(rgb)
-            dmc_table.append([index, dmc_code, dmc_name, rgb, count])
-            print('{:<8}{:<10}{:<25}{:<18}{:<10}{:<18}{:<15}{:<15}'.format(index, dmc_code, dmc_name, str(dmc_rgb), dmc_hex, str(rgb), _hex, count))
-
-        # Write output files
+        # === WRITE OUTPUT FILES === #
         downscaled_filepath = join('output', 'downscaled.png')
         pixelated_image.save(downscaled_filepath)
         print(f'Downscaled image written to {downscaled_filepath}')
@@ -109,8 +156,9 @@ if __name__ == '__main__':
 
         key_filepath = join('output', 'key.txt')
         with open(key_filepath, 'w') as f:
-            f.write('{:<8}{:<10}{:<30}{:<18}{:<10}\n'.format('Index', 'DMC Code', 'DMC Name', 'RGB', 'Count'))
+            format_string = '{:<8}{:<10}{:<25}{:<18}{:<10}{:<18}{:<15}{:<15}\n'
+            f.write(format_string.format('Index', 'DMC Code', 'DMC Name', 'DMC RGB', 'DMC HEX', 'Actual RGB', 'Actual HEX', 'Count'))
             for row in dmc_table:
-                index, dmc_code, dmc_name, rgb, count = row
-                f.write('{:<8}{:<10}{:<30}{:<18}{:<10}\n'.format(index, dmc_code, dmc_name, str(rgb), count))
+                index, dmc_code, dmc_name, dmc_rgb, dmc_hex, rgb, _hex, count = row
+                f.write(format_string.format(index, dmc_code, dmc_name, str(dmc_rgb), dmc_hex, str(rgb), _hex, count))
         print(f'Key written to {key_filepath}')
