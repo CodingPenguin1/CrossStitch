@@ -35,7 +35,7 @@ def get_dmc(rgb):
 
 
 if __name__ == '__main__':
-    with Image.open(join('source_images', 'cat.jpg')) as original_image:
+    with Image.open(join('source_images', 'stardew.png')) as original_image:
         # Downscale with bilinear interpolation
         height = int((DESIRED_WIDTH / original_image.width) * original_image.height)
         downscaled_image = original_image.resize((DESIRED_WIDTH, height), resample=2)
@@ -116,7 +116,9 @@ if __name__ == '__main__':
                 dmc_rgb_value = next((key for key in palette if palette[key] == rgb_index), None)
                 dmc_index = next((i for i in range(len(dmc_table)) if dmc_table[i][3] == dmc_rgb_value), None)
 
-                draw.text(draw_coord, str(dmc_index), anchor='mm', fill='black')
+                # Determine if text should be white or black
+                fill = 'white' if sum(dmc_rgb_value) / len(dmc_rgb_value) < 127 else 'black'
+                draw.text(draw_coord, str(dmc_index), anchor='mm', fill=fill)
                 template_draw.text(draw_coord, str(dmc_index), anchor='mm', fill='black')
 
         # Draw lines between every pixel
