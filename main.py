@@ -1,10 +1,9 @@
 #!/usr/bin/env python
 from os.path import join
-
+from tkinter import filedialog as fd
 from PIL import Image, ImageDraw
-
-MAX_COLORS = 250  # Must be no bigger than 256 (https://stackoverflow.com/questions/37146711/im-getcolors-returns-none)
-DESIRED_WIDTH = 100
+import turtle
+from progress.bar import IncrementalBar
 
 
 def distance(point_a, point_b):
@@ -34,13 +33,26 @@ def get_dmc(rgb):
 
 
 if __name__ == '__main__':
-    # === DOWNSCALING AND CONVERTING TO DMC COLORS === #
-    with Image.open(join('source_images', 'bills.jpg')) as original_image:
-        # Downscale with bilinear interpolation
-        height = int((DESIRED_WIDTH / original_image.width) * original_image.height)
-        downscaled_image = original_image.resize((DESIRED_WIDTH, height), resample=2)
+    # === USER INPUT === #
+    filepath = fd.askopenfilename(title='Input image',
+                                  filetypes=[('PNG', '*.png'), ('JPEG', '*.jpg')])
 
-        scaledown_color_count = MAX_COLORS
+    desired_width = int(turtle.textinput('Cross Stitch Size', 'How many stitches wide would you like it to be?'))
+    if desired_width < 0:
+        raise ValueError('Width must be positive')
+
+    # Must be no bigger than 256 (https://stackoverflow.com/questions/37146711/im-getcolors-returns-none)
+    max_colors = int(turtle.textinput('DMC Color Count', 'How many DMC colors would you like to limit the image to? Note: final value may be lower than you specify.'))
+    if max_colors < 1 or max_colors > 256:
+        raise ValueError('DMC color count must be between 1 and 256')
+
+    # === DOWNSCALING AND CONVERTING TO DMC COLORS === #
+    with Image.open(filepath) as original_image:
+        # Downscale with bilinear interpolation
+        height = int((desired_width / original_image.width) * original_image.height)
+        downscaled_image = original_image.resize((desired_width, height), resample=2)
+
+        scaledown_color_count = max_colors
         while True:
             # Downsample to a lower colorspace
             pixelated_image = downscaled_image.convert(mode='P', palette=Image.ADAPTIVE, colors=scaledown_color_count)
@@ -62,7 +74,7 @@ if __name__ == '__main__':
                 if not dmc_already_used:
                     dmc_table.append([index, dmc_code, dmc_name, dmc_rgb, dmc_hex, rgb, _hex, count])
 
-            if len(dmc_table) == MAX_COLORS:
+            if len(dmc_table) == max_colors:
                 break
             else:
                 scaledown_color_count += 1
@@ -77,20 +89,22 @@ if __name__ == '__main__':
 
         # Rewrite pixel values to match DMC values
         dmc_image = Image.new(mode='P', size=pixelated_image.size, color=0)
-        for x in range(dmc_image.width):
-            for y in range(dmc_image.height):
-                # Get DMC RGB value to set pixel to
-                closest_dmc_rgb, best_difference = None, float('inf')
-                for dmc in dmc_table:
-                    dmc_rgb = dmc[3]
-                    rgb_index = pixelated_image.getpixel((x, y))
-                    rgb_value = next((key for key in palette if palette[key] == rgb_index), None)
-                    diff = distance(dmc_rgb, rgb_value)
-                    if diff < best_difference:
-                        closest_dmc_rgb, best_difference = dmc[3], diff
+        with IncrementalBar('Converting to DMC colors', max=dmc_image.width * dmc_image.height, suffix='%(percent)d%%') as bar:
+            for x in range(dmc_image.width):
+                for y in range(dmc_image.height):
+                    # Get DMC RGB value to set pixel to
+                    closest_dmc_rgb, best_difference = None, float('inf')
+                    for dmc in dmc_table:
+                        dmc_rgb = dmc[3]
+                        rgb_index = pixelated_image.getpixel((x, y))
+                        rgb_value = next((key for key in palette if palette[key] == rgb_index), None)
+                        diff = distance(dmc_rgb, rgb_value)
+                        if diff < best_difference:
+                            closest_dmc_rgb, best_difference = dmc[3], diff
 
-                # Set the pixel to the DMC RGB value
-                dmc_image.putpixel((x, y), closest_dmc_rgb)
+                    # Set the pixel to the DMC RGB value
+                    dmc_image.putpixel((x, y), closest_dmc_rgb)
+                    bar.next()
 
         # Update color list and palette since we just changed the pixel values
         colors = dmc_image.getcolors()  # [(count, index), ...]
@@ -107,19 +121,21 @@ if __name__ == '__main__':
 
         # Draw numbers on each pixel
         draw = ImageDraw.Draw(pixelated_upscaled)
-        for x in range(dmc_image.width):
-            for y in range(dmc_image.height):
-                draw_coord = (x * UPSCALE_FACTOR + 4, y * UPSCALE_FACTOR + 1)  # Text characters are default 6x6
+        with IncrementalBar('Drawing indicies', max=dmc_image.width * dmc_image.height, suffix='%(percent)d%%') as bar:
+            for x in range(dmc_image.width):
+                for y in range(dmc_image.height):
+                    draw_coord = (x * UPSCALE_FACTOR + 4, y * UPSCALE_FACTOR + 1)  # Text characters are default 6x6
 
-                # Get index from DMC list
-                rgb_index = dmc_image.getpixel((x, y))
-                dmc_rgb_value = next((key for key in palette if palette[key] == rgb_index), None)
-                dmc_index = next((i for i in range(len(dmc_table)) if dmc_table[i][3] == dmc_rgb_value), None)
+                    # Get index from DMC list
+                    rgb_index = dmc_image.getpixel((x, y))
+                    dmc_rgb_value = next((key for key in palette if palette[key] == rgb_index), None)
+                    dmc_index = next((i for i in range(len(dmc_table)) if dmc_table[i][3] == dmc_rgb_value), None)
 
-                # Determine if text should be white or black
-                fill = 'white' if sum(dmc_rgb_value) / len(dmc_rgb_value) < 127 else 'black'
-                draw.text(draw_coord, str(dmc_index), anchor='mm', fill=fill)
-                template_draw.text(draw_coord, str(dmc_index), anchor='mm', fill='black')
+                    # Determine if text should be white or black
+                    fill = 'white' if sum(dmc_rgb_value) / len(dmc_rgb_value) < 127 else 'black'
+                    draw.text(draw_coord, str(dmc_index), anchor='mm', fill=fill)
+                    template_draw.text(draw_coord, str(dmc_index), anchor='mm', fill='black')
+                    bar.next()
 
         # Draw lines between every pixel
         for x in range(UPSCALE_FACTOR - 1, pixelated_upscaled.width, UPSCALE_FACTOR):
