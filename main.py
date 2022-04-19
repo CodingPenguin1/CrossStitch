@@ -59,7 +59,7 @@ if __name__ == '__main__':
             pixelated_image = downscaled_image.convert(mode='P', palette=Image.ADAPTIVE, colors=scaledown_color_count)
 
             # Generate DMC color key
-            dmc_table = []  # [[index, DMC code, DMC name, RGB, count], ...]
+            dmc_table = []  # [[index, DMC code, DMC name, DMC RGB, DMC Hex, Actual RGB, Actual Hex, count], ...]
             colors = pixelated_image.getcolors()  # [(count, index), ...]
             palette = pixelated_image.palette.colors  # {color: index, ...}
 
